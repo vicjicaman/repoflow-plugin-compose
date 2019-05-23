@@ -2,8 +2,12 @@ import _ from 'lodash'
 import fs from 'fs-extra'
 import path from 'path'
 import YAML from 'yamljs';
-import {spawn} from '@nebulario/core-process';
-import {IO} from '@nebulario/core-plugin-request';
+import {
+  spawn
+} from '@nebulario/core-process';
+import {
+  IO
+} from '@nebulario/core-plugin-request';
 
 const dependentLink = (service, modules, dependent) => {
 
@@ -20,7 +24,9 @@ const dependentLink = (service, modules, dependent) => {
   } = dependent;
 
   for (const srvDependent of dependents) {
-    const srvDependentMod = _.find(modules, {moduleid: srvDependent.moduleid});
+    const srvDependentMod = _.find(modules, {
+      moduleid: srvDependent.moduleid
+    });
 
     if (srvDependentMod) {
       const {
@@ -53,27 +59,48 @@ const dependentLink = (service, modules, dependent) => {
 export const start = (params, cxt) => {
 
   const {
-    module: {
-      moduleid,
-      mode,
-      fullname,
+    performer: {
+      instanced,
+      baselined
+    },
+    output: {
+      paths: {
+        absolute: {
+          folder: outputPath
+        }
+      }
+    }
+  } = params;
+
+  let sourceFolder = null;
+
+  if (instanced) {
+    const {
       code: {
         paths: {
           absolute: {
             folder
           }
-        },
-        dependencies
-      },
-      instance: {
-        instanceid
+        }
       }
-    },
-    modules
-  } = params;
+    } = instanced;
 
-  const filesToCopy = [".env", "docker-compose.yml"];
-  const outputPath = path.join(folder, "runtime");
+    sourceFolder = folder;
+  } else if (baselined) {
+    const {
+      code: {
+        paths: {
+          absolute: {
+            folder
+          }
+        }
+      }
+    } = baselined;
+
+    sourceFolder = folder;
+  }
+
+  const filesToCopy = ["docker-compose.yml"];
 
   if (!fs.existsSync(outputPath)) {
     fs.mkdirSync(outputPath);
@@ -90,20 +117,25 @@ export const start = (params, cxt) => {
   const composePath = path.join(outputPath, "docker-compose.yml");
   const compose = YAML.load(composePath);
 
-  for (const depSrv of dependencies) {
-    const {metadata: {
+  for (const depSrv of dependents) {
+    /*const {
+      metadata: {
         service
-      }} = depSrv;
-    const appMod = _.find(modules, {moduleid: depSrv.moduleid});
+      }
+    } = depSrv;
+    const appMod = _.find(modules, {
+      moduleid: depSrv.moduleid
+    });
 
     if (appMod) {
       dependentLink(compose.services[service], modules, appMod);
-    }
+    }*/
   }
 
   const ymlContent = YAML.stringify(compose, 4);
   fs.writeFileSync(composePath, ymlContent, 'utf8');
 
+  return null;
   return spawn('docker-compose', [
     '-p', instanceid + "_" + moduleid,
     'up',
@@ -112,7 +144,9 @@ export const start = (params, cxt) => {
   ], {
     cwd: outputPath
   }, {
-    onOutput: async function({data}) {
+    onOutput: async function({
+      data
+    }) {
 
       if (data.includes("Running at")) {
         IO.sendEvent("run.started", {
@@ -124,7 +158,9 @@ export const start = (params, cxt) => {
         data
       }, cxt);
     },
-    onError: async ({data}) => {
+    onError: async ({
+      data
+    }) => {
       IO.sendEvent("run.err", {
         data
       }, cxt);
