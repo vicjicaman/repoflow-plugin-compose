@@ -1,9 +1,14 @@
-import {IO, Plugin} from '@nebulario/core-plugin-request';
+import {
+  IO,
+  Plugin
+} from '@nebulario/core-plugin-request';
 
 import * as Dependencies from './dependencies';
 import * as Build from './build';
 import * as Run from './run';
-import {publish} from './publish';
+import {
+  publish
+} from './publish';
 
 (async () => {
 
@@ -13,6 +18,7 @@ import {publish} from './publish';
       sync: Dependencies.sync
     },
     run: {
+      listen: Run.listen,
       start: Run.start
     },
     build: {
@@ -22,6 +28,8 @@ import {publish} from './publish';
   });
 
 })().catch(e => {
-  IO.sendEvent("plugin.fatal", {data: e.message});
+  IO.sendEvent("plugin.fatal", {
+    data: e.message
+  });
   throw e;
 });
