@@ -225,7 +225,7 @@ export const start = (params, cxt) => {
 
       if (depSrvPerformer.linked.includes("run")) {
 
-        IO.sendEvent("out", {
+        IO.sendEvent("info", {
           data: " - Linked " + depSrv.moduleid
         }, cxt);
 
@@ -254,8 +254,8 @@ export const start = (params, cxt) => {
               }, cxt);
 
               if (appPerformer.linked.includes("run")) {
-                IO.sendEvent("out", {
-                  data: " - App linked "
+                IO.sendEvent("info", {
+                  data: " - App linked " + appPerformer.performerid
                 }, cxt);
 
                 const {
@@ -280,7 +280,7 @@ export const start = (params, cxt) => {
 
               } else {
                 IO.sendEvent("warning", {
-                  data: " - App not linked "
+                  data: " - App not linked " + appPerformer.performerid
                 }, cxt);
               }
 
@@ -326,7 +326,7 @@ export const start = (params, cxt) => {
         }
       } else {
         IO.sendEvent("warning", {
-          data: " - Not linked "
+          data: " - Not linked " + depSrv.moduleid
         }, cxt);
       }
 
