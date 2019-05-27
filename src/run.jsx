@@ -13,53 +13,6 @@ import {
   syncRegexDependency
 } from './dependencies'
 
-const dependentLink = (service, modules, dependent) => {
-
-  const {
-    code: {
-      paths: {
-        absolute: {
-          folder: appModuleFolder
-        }
-      },
-      dependents
-    },
-    config
-  } = dependent;
-
-  for (const srvDependent of dependents) {
-    const srvDependentMod = _.find(modules, {
-      moduleid: srvDependent.moduleid
-    });
-
-    if (srvDependentMod) {
-      const {
-        fullname,
-        type,
-        code: {
-          paths: {
-            absolute: {
-              folder: featModuleFolder
-            }
-          }
-        },
-        config
-      } = srvDependentMod;
-
-      if (type === "npm" && config.build.linked) {
-        const entry = featModuleFolder + ":/app/node_modules/" + fullname;
-        if (!service.volumes.includes(entry)) {
-          service.volumes.push(entry);
-        }
-      }
-
-      dependentLink(service, modules, srvDependentMod);
-    }
-
-  }
-
-}
-
 export const listen = async (params, cxt) => {
   /*IO.sendEvent("out", {
     data: " - LISTEN "
@@ -114,7 +67,7 @@ export const listen = async (params, cxt) => {
       if (serviceLabel) {
         const service = serviceLabel.split(":")[1];
         IO.sendEvent("out", {
-          data: " - Service" + service
+          data: " - Service " + service
         }, cxt);
 
         IO.sendEvent("warning", {
@@ -241,83 +194,37 @@ export const start = (params, cxt) => {
           const [imgName, imgVer] = currServ.image.split(":");
           currServ.image = imgName + ":linked";
 
-          const appDep = _.find(depSrvPerformer.module.dependencies, dep => dep.kind === "app")
+          for (const perf of performers) {
 
-          if (appDep) {
-            const appPerformer = _.find(performers, {
-              performerid: appDep.moduleid
-            });
+            const {
+              module: {
+                fullname,
+                type
+              },
+              code: {
+                paths: {
+                  absolute: {
+                    folder: featModuleFolder
+                  }
+                }
+              },
+              linked
+            } = perf;
 
-            if (appPerformer) {
-              IO.sendEvent("out", {
-                data: "Performing app found " + appPerformer.performerid
+            if (linked.includes("run") && type === "npm") {
+
+              IO.sendEvent("info", {
+                data: " - NPM linked " + perf.performerid
               }, cxt);
 
-              if (appPerformer.linked.includes("run")) {
-                IO.sendEvent("info", {
-                  data: " - App linked " + appPerformer.performerid
-                }, cxt);
-
-                const {
-                  module: {
-                    fullname
-                  },
-                  code: {
-                    paths: {
-                      absolute: {
-                        folder: featModuleFolder
-                      }
-                    }
-                  }
-                } = appPerformer;
-
-                const entry = featModuleFolder + ":/app/node_modules/" + fullname;
-                if (!currServ.volumes) {
-                  currServ.volumes = [];
-                }
-                currServ.volumes.push(entry);
-
-
-              } else {
-                IO.sendEvent("warning", {
-                  data: " - App not linked " + appPerformer.performerid
-                }, cxt);
+              const entry = featModuleFolder + ":/app/node_modules/" + fullname;
+              if (!currServ.volumes) {
+                currServ.volumes = [];
               }
-
-
-
+              currServ.volumes.push(entry);
             }
-
           }
 
-          /*IO.sendEvent("out", {
-            data: JSON.stringify(appDep, null, 2)
-          }, cxt);*/
-
-
-
-
-          /*const pkgPerformer = _.find(performers, {
-            performerid: depSrv.moduleid
-          });*/
-
-
-
-          //const serviceDependencies = 1.70.0-master
-          /*const serviceDependencies = _.filter(dependencies, dep => dep.moduleid === depSrv.moduleid);
-          for (const srvDep of serviceDependencies) {
-            syncRegexDependency(output, {
-              ...srvDep,
-              version: "linked"
-            });
-          }*/
-
-
-
-
-          /*IO.sendEvent("out", {
-            data: JSON.stringify(serviceDependencies, null, 2)
-          }, cxt);*/
 
         } else {
           IO.sendEvent("warning", {
@@ -333,7 +240,42 @@ export const start = (params, cxt) => {
 
     }
 
-    /**/
+    /*
+
+
+
+    if (appPerformer.linked.includes("run")) {
+      IO.sendEvent("info", {
+        data: " - App linked " + appPerformer.performerid
+      }, cxt);
+
+      const {
+        module: {
+          fullname
+        },
+        code: {
+          paths: {
+            absolute: {
+              folder: featModuleFolder
+            }
+          }
+        }
+      } = appPerformer;
+
+      const entry = featModuleFolder + ":/app/node_modules/" + fullname;
+      if (!currServ.volumes) {
+        currServ.volumes = [];
+      }
+      currServ.volumes.push(entry);
+
+
+    } else {
+      IO.sendEvent("warning", {
+        data: " - App not linked " + appPerformer.performerid
+      }, cxt);
+    }
+
+    */
 
     /*const {
       metadata: {
