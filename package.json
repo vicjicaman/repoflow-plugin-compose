@@ -1,6 +1,6 @@
 {
   "name": "@nebulario/repoflow-plugin-compose",
-  "version": "1.70.3-master",
+  "version": "1.70.0-resolve-workspace-prod",
   "description": "Base for nodes",
   "main": "./dist/index.js",
   "repository": "github.com:vicjicaman/core-render-stateful-server.git",
