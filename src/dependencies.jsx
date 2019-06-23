@@ -13,8 +13,8 @@ const getServices = (folder, cxt) => {
 export const getComposeDependencies = (folder, cxt) => {
   const services = getServices(folder, cxt);
 
-  return _.map(services, srv => ({
-    ...generateRegexDependency({
+  return _.map(services, srv =>
+    generateRegexDependency({
       kind: "dependency",
       folder,
       filename,
@@ -22,11 +22,8 @@ export const getComposeDependencies = (folder, cxt) => {
         fullname: ".+" + srv + ":\\s+image:(?:\\s+|)(.+):(?:.+)",
         version: ".+" + srv + ":\\s+image:(?:\\s+|)(?:.+):(.+)"
       }
-    }, cxt),
-    metadata: {
-      service: srv
-    }
-  }));
+    }, cxt)
+  );
 }
 
 export const list = async ({
@@ -40,7 +37,8 @@ export const list = async ({
     }
   }
 }, cxt) => {
-  const {pluginid} = cxt;
+
+
   return getComposeDependencies(folder, cxt);
 }
 
@@ -60,7 +58,11 @@ export const sync = async ({
     version
   }
 }, cxt) => {
-  syncRegexDependency(folder, {filename, path, version});
+  syncRegexDependency(folder, {
+    filename,
+    path,
+    version
+  });
   return {};
 }
 
@@ -73,7 +75,6 @@ export const generateRegexDependency = ({
     version: RegexToVersion
   }
 }, cxt) => {
-  const {pluginid} = cxt;
   const contentFile = path.join(folder, filename);
 
   if (fs.existsSync(contentFile)) {
