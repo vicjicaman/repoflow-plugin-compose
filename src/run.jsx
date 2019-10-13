@@ -1,57 +1,37 @@
-import _ from 'lodash'
-import fs from 'fs-extra'
-import path from 'path'
-import YAML from 'yamljs';
-import {
-  exec,
-  spawn
-} from '@nebulario/core-process';
-import {
-  IO
-} from '@nebulario/core-plugin-request';
-import {
-  syncRegexDependency
-} from './dependencies'
+import _ from "lodash";
+import fs from "fs-extra";
+import path from "path";
+import { exec, spawn } from "@nebulario/core-process";
+import { IO } from "@nebulario/core-plugin-request";
+import * as JsonUtils from "@nebulario/core-json";
 
 export const listen = async (params, cxt) => {
-  /*IO.sendEvent("out", {
-    data: " - LISTEN "
-  }, cxt);*/
-
   const {
     performerid: sourcePerformerID,
     taskid: sourceTaskID,
     event: sourceEvent
   } = params;
 
-  IO.sendEvent("info", {
-    data: "EVENT: " + sourceTaskID + "." + sourceEvent + "@" + sourcePerformerID
-  }, cxt);
+  IO.print(
+    "info",
+    "EVENT: " + sourceTaskID + "." + sourceEvent + "@" + sourcePerformerID,
+    cxt
+  );
 
   if (params.operation) {
-    /*IO.sendEvent("out", {
-      data: " - LISTEN " + params.operation.operationid
-    }, cxt);*/
-
     const {
-      task: {
-        taskid
-      },
+      task: { taskid },
       performer: {
         performerid,
         type,
         output: {
           paths: {
-            absolute: {
-              folder: outputPath
-            }
+            absolute: { folder: outputPath }
           }
         },
         dependents
       },
-      instance: {
-        instanceid
-      },
+      instance: { instanceid },
       performers
     } = params.operation.params;
 
@@ -59,271 +39,230 @@ export const listen = async (params, cxt) => {
       performerid: sourcePerformerID
     });
 
-
     if (depSrvPerformer) {
-
-      const serviceLabel = _.find(depSrvPerformer.labels, lbl => lbl.startsWith("service:"));
+      const serviceLabel = _.find(depSrvPerformer.labels, lbl =>
+        lbl.startsWith("service:")
+      );
 
       if (serviceLabel) {
         const service = serviceLabel.split(":")[1];
-        IO.sendEvent("out", {
-          data: " - Service " + service
-        }, cxt);
+        IO.print("out", " - Service " + service, cxt);
 
-        IO.sendEvent("warning", {
-          data: "RESTARTING... " + service
-        }, cxt);
+        IO.print("warning", "RESTARTING... " + service, cxt);
 
         try {
-
           /**/
           const inst = instanceid + "_" + performerid;
-          const {
-            stdout,
-            stderr
-          } = await exec(["cd " + outputPath, "docker-compose -p " + inst + "  restart " + service], {
+          const { stdout, stderr } = await exec(
+            [
+              "cd " + outputPath,
+              "docker-compose -p " + inst + "  restart " + service
+            ],
+            {},
+            {},
+            cxt
+          );
 
-          }, {}, cxt);
+          IO.print("out", stdout, cxt);
 
+          IO.print("warning", stderr, cxt);
 
-          IO.sendEvent("out", {
-            data: stdout
-          }, cxt);
-
-          IO.sendEvent("warning", {
-            data: stderr
-          }, cxt);
-
-          IO.sendEvent("out", {
-            data: "RESTARTED"
-          }, cxt);
-
+          IO.print("out", "RESTARTED", cxt);
         } catch (err) {
-          IO.sendEvent("warning", {
-            data: "RESTART_ERROR: " + err
-          }, cxt);
+          IO.print("warning", "RESTART_ERROR: " + err, cxt);
         }
-
-
-      } else {
-        IO.sendEvent("warning", {
-          data: "NO_SERVICE_LABEL: " + sourcePerformerID
-        }, cxt);
       }
-    } else {
-      IO.sendEvent("warning", {
-        data: "NO_TASK_PERFORMER: " + sourcePerformerID + "@" + taskid
-      }, cxt);
     }
-
-
-
   }
-}
+};
 
-export const start = (params, cxt) => {
-
+export const transform = (params, cxt) => {
   const {
-    instance: {
-      instanceid
-    },
+    instance: { instanceid },
     performer: {
       performerid,
       type,
       output: {
         paths: {
-          absolute: {
-            folder: outputPath
-          }
+          absolute: { folder: outputPath }
         }
       },
       code,
       code: {
         paths: {
-          absolute: {
-            folder: sourceFolder
-          }
+          absolute: { folder: sourceFolder }
         }
       },
       dependents,
-      module: {
-        dependencies
-      }
+      module: { dependencies }
     },
-    performers
+    performers,
+    instance: {
+      paths: {
+        absolute: { folder: instanceFolder }
+      }
+    }
   } = params;
 
-  const filesToCopy = ["docker-compose.yml"];
+  const compose = JsonUtils.load(
+    path.join(sourceFolder, "docker-compose.yml"),
+    true
+  );
 
-  for (const compFile of filesToCopy) {
-    const srcDockerCompose = path.join(sourceFolder, compFile);
-    const destDockerCompose = path.join(outputPath, compFile);
-    if (fs.existsSync(srcDockerCompose)) {
-      fs.copySync(srcDockerCompose, destDockerCompose);
+  for (const srvKey in compose.services) {
+    const currServ = compose.services[srvKey];
+    const [imgName, imgVer] = currServ.image.split(":");
+
+    const depSrvPerformer = _.find(
+      performers,
+      ({ module: { fullname } }) => fullname === imgName
+    );
+
+    if (depSrvPerformer.linked) {
+      IO.print(
+        "out",
+        "Performing container found " + depSrvPerformer.performerid,
+        cxt
+      );
+      currServ.image = imgName + ":linked";
+
+      if (!currServ.volumes) {
+        currServ.volumes = [];
+      }
+
+      currServ.volumes.push(path.join(instanceFolder, "modules") + ":/env");
+      currServ.volumes.push(
+        depSrvPerformer.code.paths.absolute.folder + ":/env/app"
+      );
     }
   }
 
-  const composePath = path.join(outputPath, "docker-compose.yml");
-  const compose = YAML.load(composePath);
+  JsonUtils.save(path.join(outputPath, "docker-compose.yml"), compose, true);
+};
 
-  for (const depSrv of dependents) {
-    const depSrvPerformer = _.find(performers, {
-      performerid: depSrv.moduleid
-    });
+/*
 
-    if (depSrvPerformer) {
-      IO.sendEvent("out", {
-        data: "Performing dependent found " + depSrv.moduleid
-      }, cxt);
 
-      if (depSrvPerformer.linked.includes("run")) {
 
-        IO.sendEvent("info", {
-          data: " - Linked " + depSrv.moduleid
-        }, cxt);
+for (const depSrv of dependents) {
+  const depSrvPerformer = _.find(performers, {
+    performerid: depSrv.moduleid
+  });
 
-        const serviceLabel = _.find(depSrvPerformer.labels, lbl => lbl.startsWith("service:"));
+  if (depSrvPerformer) {
+    if (
+      depSrvPerformer.linked &&
+      depSrvPerformer.module.type === "container"
+    ) {
+      IO.print("info", " - Linked " + depSrvPerformer.performerid, cxt);
 
-        if (serviceLabel) {
-          const service = serviceLabel.split(":")[1];
-          IO.sendEvent("out", {
-            data: " - Service" + service
-          }, cxt);
+      if (serviceLabel) {
+        const service = serviceLabel.split(":")[1];
+        IO.print("out", " - Service" + service, cxt);
 
-          const currServ = compose.services[service];
-          const [imgName, imgVer] = currServ.image.split(":");
-          currServ.image = imgName + ":linked";
+        const currServ = compose.services[service];
+        const [imgName, imgVer] = currServ.image.split(":");
+        currServ.image = imgName + ":linked";
 
-          for (const perf of performers) {
-
-            const {
-              module: {
-                fullname,
-                type
-              },
-              code: {
-                paths: {
-                  absolute: {
-                    folder: featModuleFolder
-                  }
-                }
-              },
-              linked
-            } = perf;
-
-            if (linked.includes("run") && type === "npm") {
-
-              IO.sendEvent("info", {
-                data: " - NPM linked " + perf.performerid
-              }, cxt);
-
-              const entry = featModuleFolder + ":/app/node_modules/" + fullname;
-              if (!currServ.volumes) {
-                currServ.volumes = [];
+        for (const perf of performers) {
+          const {
+            module: { fullname, type },
+            code: {
+              paths: {
+                absolute: { folder: featModuleFolder }
               }
-              currServ.volumes.push(entry);
-            }
+            },
+            linked
+          } = perf;
+
+          if (linked && type === "npm") {
+            IO.print("info", " - NPM linked " + perf.performerid, cxt);
+
+            currServ.volumes.push(entry);
           }
-
-
-        } else {
-          IO.sendEvent("warning", {
-            data: " - No service label"
-          }, cxt);
         }
-      } else {
-        IO.sendEvent("warning", {
-          data: " - Not linked " + depSrv.moduleid
-        }, cxt);
       }
-
-
     }
+  }
+}
 
-    /*
+if (serviceLabel) {
+  const service = serviceLabel.split(":")[1];
+  IO.print("out", " - Service" + service, cxt);
 
+  const currServ = compose.services[service];
+  const [imgName, imgVer] = currServ.image.split(":");
+  currServ.image = imgName + ":linked";
 
-
-    if (appPerformer.linked.includes("run")) {
-      IO.sendEvent("info", {
-        data: " - App linked " + appPerformer.performerid
-      }, cxt);
-
-      const {
-        module: {
-          fullname
-        },
-        code: {
-          paths: {
-            absolute: {
-              folder: featModuleFolder
-            }
-          }
+  for (const perf of performers) {
+    const {
+      module: { fullname, type },
+      code: {
+        paths: {
+          absolute: { folder: featModuleFolder }
         }
-      } = appPerformer;
+      },
+      linked
+    } = perf;
 
-      const entry = featModuleFolder + ":/app/node_modules/" + fullname;
+    if (linked && type === "npm") {
+      IO.print("info", " - NPM linked " + perf.performerid, cxt);
+
+      const entry =
+        featModuleFolder + ":/env/app/node_modules/" + fullname;
       if (!currServ.volumes) {
         currServ.volumes = [];
       }
       currServ.volumes.push(entry);
-
-
-    } else {
-      IO.sendEvent("warning", {
-        data: " - App not linked " + appPerformer.performerid
-      }, cxt);
     }
-
-    */
-
-    /*const {
-      metadata: {
-        service
-      }
-    } = depSrv;
-    const appMod = _.find(modules, {
-      moduleid: depSrv.moduleid
-    });
-
-    if (appMod) {
-      dependentLink(compose.services['app'], modules, appMod);
-    }*/
   }
-
-  const ymlContent = YAML.stringify(compose, 4);
-  fs.writeFileSync(composePath, ymlContent, 'utf8');
-
-  //    '-e', '',
-  return spawn('docker-compose', [
-    '-p', instanceid + "_" + performerid,
-    'up',
-    '--remove-orphans',
-    '--no-color'
-  ], {
-    cwd: outputPath
-  }, {
-    onOutput: async function({
-      data
-    }) {
-
-      if (data.includes("Running")) {
-        IO.sendEvent("done", {
-          data
-        }, cxt);
-      }
-
-      IO.sendEvent("out", {
-        data
-      }, cxt);
-    },
-    onError: async ({
-      data
-    }) => {
-      IO.sendEvent("warning", {
-        data
-      }, cxt);
-    }
-  });
-
 }
+*/
+
+export const start = (params, cxt) => {
+  const {
+    instance: { instanceid },
+    performer: {
+      performerid,
+      type,
+      output: {
+        paths: {
+          absolute: { folder: outputPath }
+        }
+      },
+      code,
+      code: {
+        paths: {
+          absolute: { folder: sourceFolder }
+        }
+      },
+      dependents,
+      module: { dependencies }
+    },
+    performers
+  } = params;
+
+  const args = [
+    "-p",
+    instanceid + "_" + performerid,
+    "up",
+    "--remove-orphans",
+    "--no-color"
+  ];
+
+  IO.print("info", outputPath + " => docker-compose " + args.join(" "), cxt);
+
+  IO.print("done", "Starting compose for components", cxt);
+
+  return spawn(
+    "docker-compose",
+    args,
+    {
+      cwd: outputPath
+    },
+    {
+      onOutput: async ({ data }) => IO.print("out", data.toString(), cxt),
+      onError: async ({ data }) => IO.print("warning", data.toString(), cxt)
+    }
+  );
+};
